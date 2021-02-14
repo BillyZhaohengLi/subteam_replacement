@@ -52,24 +52,38 @@ def extract_skill_ids(skill_html):
 @return a list of endorser url_ids that endorsed the skill represented by the param url
 """
 def extract_skill_endorsers(url, cookies):
-    r = requests.get(url, cookies=cookies).text.replace("&quot;", '"')
-    endorser_info_str = re.findall(r'({"data":.*?)\n', r)[-1]
-    endorser_info_dic = json.loads(endorser_info_str) 
-    endorser_names = [] 
-    skill_name = ""
-    for elem in endorser_info_dic["included"]:
-        try: 
-            if "standardizedSkillUrn" in elem.keys():
-                skill_name = elem.get("name")
+    r = requests.get(url, cookies=cookies).text.replace("&quot;", '"') 
+    data_infos = re.findall(r'({"data":.*?)\n', r) 
+    endorser_infos = []
+    skill_name = "" 
+    endorser_names = set()
+    
+    for data in data_infos: 
+        try:
+            js_dic = json.loads(data) 
+            if not "included" in js_dic.keys(): continue 
+            if js_dic["included"][0].get("endorser") is None and js_dic["included"][1].get("endorser") is None:
                 continue
-
-            if elem.get("lastName") is not None: 
-                user_url_id = elem.get("publicIdentifier")  
-                endorser_names.append(user_url_id) 
+            endorser_infos.append(js_dic)
+            
+                
         except: 
-            continue  
+            continue
         
-    return skill_name, endorser_names
+    for endorser_info_dic in endorser_infos:
+        for elem in endorser_info_dic["included"]:
+            try: 
+                if "standardizedSkillUrn" in elem.keys():
+                    skill_name = elem.get("name") if skill_name == "" else skill_name
+                    continue
+
+                if elem.get("publicIdentifier") is not None:  
+                    user_url_id = elem.get("publicIdentifier")  
+                    endorser_names.add(user_url_id) 
+            except: 
+                continue  
+
+    return skill_name, list(endorser_names)
 
 
 
