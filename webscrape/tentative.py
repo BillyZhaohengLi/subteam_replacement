@@ -5,9 +5,11 @@ import re
 import os, sys
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
-import time
+from time import sleep 
 import json
 import datetime
+import pickle
+import signal
 
 """
 @param cookies string copied from Chrome - check tutorial for how to get it 
@@ -122,17 +124,19 @@ def extract_experience(src_html):
 
 
 
-
-if __name__ == "__main__":
-    
-    # URLs to be used
-    user_base_url = "https://www.linkedin.com/in/bharath-pattabiraman-66063761/" 
-#     user_base_url = "https://www.linkedin.com/in/zhaoheng-li/"
-    url_prefix = "https://www.linkedin.com/in/" 
+"""
+Run a single iteration of BFS 
+Given the top user of queue, extract user experiences (as list), 
+and skill2endorse (as dict) and return 
+@param top user_id of BFS queue
+@return experiences (list), skill2endorse (dict)
+"""
+def single_iteration(user_id): 
+    user_base_url = f"https://www.linkedin.com/in/{user_id}/" 
     skill_suffix = "detail/skills/" 
 
     # Get cookie for session infomation to be used for requests
-    cookie_str = 'li_sugr=2b62d20d-4905-444e-a538-f07a1feadb2f; bcookie="v=2&6f8410b8-b0d8-4b8f-8bf5-239142321e88"; lissc=1; bscookie="v=1&20201220200242e344c232-aa24-4519-8a27-d5da6b9506ceAQH71xyZxpNwSM1qSRHN1FShAdXZzBD-"; li_rm=AQGOQGh5fUe25wAAAXcdkjMFAjYe0or_97PLjw2NGfZh6pu0Tov0J624hwaTwTGnjhvFTXD9KU6MPwfRYE-kkKryJcGqwq1vjP1BH94G5dTNVUcibTpgw2Nb; _ga=GA1.2.388260073.1611108862; aam_uuid=17193061939447905092347891705167064179; g_state={"i_l":0}; liap=true; JSESSIONID="ajax:6661573881781652824"; _gcl_au=1.1.1133925316.1612394929; timezone=America/Guatemala; _gid=GA1.2.361636778.1612997530; lang=v=2&lang=en-us; spectroscopyId=f25b1ae3-4235-432c-9b9a-d5ddd91c095b; AMCVS_14215E3D5995C57C0A495C55@AdobeOrg=1; AMCV_14215E3D5995C57C0A495C55@AdobeOrg=-637568504|MCIDTS|18670|MCMID|16627044507729075582331259510278283192|MCAAMLH-1613710235|7|MCAAMB-1613710235|RKhpRz8krg2tLO6pguXWp5olkAcUniQYPHaMWWgdJ3xzPWQmdj0y|MCOPTOUT-1613112635s|NONE|vVersion|5.1.1|MCCIDH|-1705543759; li_oatml=AQHphKFmQsnfEAAAAXedJEu6wjMdOwdTn-Xo3WlQNwaLxaY0wLA5Bh-vWpXud-JMRpNS7BlbZIhhMVJMytgFQzwvIEz2Brjr; li_at=AQEDASr9dkoC0an-AAABdyH_sTsAAAF3wXWolU4AEk-KkIU8ezb24bKbs2p63UIax_yXtUrZ4HU4x2AqwmOywDgB8vKekajFMCGnfMiY93e4xYwSr2gy7TWR6-bZYVLtoEgpeet6cqGHAfH6c3UwsPGU; _gat=1; UserMatchHistory=AQJ9pGNpoWmM4AAAAXeeXlcNRbPlwCyPgqeXuBZMb6o1H3rRLcaOehGH2-2cdZl7zEiIIDDtvkzme6xqM13zoOyb1UQq7i0yP0N3vu9J-mj2FK37Br9aTnhGRfNH_op_gQjFKl3D_xA9L8PInHyfqxZd7WfbiWbq-NWyvomeJARFtN9y0mQ7-S907yVhMnkgWxwAPvzzjzFLUg9x1UMjQVFpikmGmnEtA7CiPSFCgaWKZqEpCWjTCM_5hpFPGldlg2eTBc0xdb9Nc_7bzcUmOjfeSYXVoKl2nuMX; lidc="b=VB62:s=V:r=V:g=2881:u=46:i=1613269719:t=1613356029:v=1:sig=AQHqMgO-OxoNHTWlslyQtInLyQfPckvn"'
+    cookie_str = 'li_sugr=2b62d20d-4905-444e-a538-f07a1feadb2f; bcookie="v=2&6f8410b8-b0d8-4b8f-8bf5-239142321e88"; lissc=1; bscookie="v=1&20201220200242e344c232-aa24-4519-8a27-d5da6b9506ceAQH71xyZxpNwSM1qSRHN1FShAdXZzBD-"; li_rm=AQGOQGh5fUe25wAAAXcdkjMFAjYe0or_97PLjw2NGfZh6pu0Tov0J624hwaTwTGnjhvFTXD9KU6MPwfRYE-kkKryJcGqwq1vjP1BH94G5dTNVUcibTpgw2Nb; _ga=GA1.2.388260073.1611108862; aam_uuid=17193061939447905092347891705167064179; g_state={"i_l":0}; JSESSIONID="ajax:6661573881781652824"; _gcl_au=1.1.1133925316.1612394929; timezone=America/Guatemala; _gid=GA1.2.361636778.1612997530; lang=v=2&lang=en-us; spectroscopyId=f25b1ae3-4235-432c-9b9a-d5ddd91c095b; AMCVS_14215E3D5995C57C0A495C55@AdobeOrg=1; li_oatml=AQHphKFmQsnfEAAAAXedJEu6wjMdOwdTn-Xo3WlQNwaLxaY0wLA5Bh-vWpXud-JMRpNS7BlbZIhhMVJMytgFQzwvIEz2Brjr; AMCV_14215E3D5995C57C0A495C55@AdobeOrg=-637568504|MCIDTS|18673|MCMID|16627044507729075582331259510278283192|MCAAMLH-1613877811|7|MCAAMB-1613877811|RKhpRz8krg2tLO6pguXWp5olkAcUniQYPHaMWWgdJ3xzPWQmdj0y|MCOPTOUT-1613280211s|NONE|vVersion|5.1.1|MCCIDH|-1705543759; UserMatchHistory=AQLicC0nuaE7rgAAAXefa7Fayxz6cH_kGA7mEHwKnRuSZL2JGKBXTIqNG7GK-iDszvQPUl04t0MqkV9fxs2QOznTs5K4NO0dPAYwMriMHVb3JUnvtv8TRxYPPjDUv_LKK3e6hMzMTy_qEWvJ2ZOrGCPnV2wEJn83mGlV1zOE3AWzJjXja-YKJDQLWXL6lsvIL4RPy-ypX9wjJXRu7Nmb9LoOFfaSOM3q3AQItOVUrNBOmfb-GID646eWolacbN9y9ikMMved3YOhEjDbNTXqZZDvk-NA-OhqurzR; lidc="b=VGST03:s=V:r=V:g=2239:u=1:i=1613290014:t=1613376414:v=1:sig=AQGHWXAzX4PXogDpnVtLT5FCEHQdY-FL"; fid=AQEkbzxtR1iepwAAAXefmB0ypLJAi1e1kLk56w0gbG1UHY5PYEj7xG87qnYO5QwxoZukKnr4hZag4g; ccookie=AQG/hou2WWLtzQAAAXefmIWIz6Jr0kzj0JkXz6wiMEPuC3oIU6PluhUpjd5460WFnjJbQA0pkW/Fd3Ob8ufBRwVyKHfmo+A/Etmek0er0tDWIs0uhi2t56AVIz/bIoPJTCiX9Q==; G_ENABLED_IDPS=google; fid=AQHuQUOQ04JdWgAAAXefnPqVfRN0QzZwaPi4NRVPh7Uib_sTJlKBSfdW5IiBDFIAy-bjnTKSMv_7BQ; _gat=1; fcookie=AQGGgMfVcEi5RwAAAXefnQaVyw9vSTFWS8Hh3TDLkIVInO-ey0q6Bv0_M7mk4ceN5Kr9aaylorBsyvgKBVfgnGhWoGVzOFHqu1aVSM0T6U7fZ5pGVdphZ8Cf8x_FOoBkeEaOobVnNIFGRb-9zl3CyH6WYGZ1cQP_ihXKJZ-CJf5iUda0QIH_lAsAjVW4pmTWiD1UJxQ1aZIxntG9PqCPu8pBzAJ0XJrb9kM_U2aLDNqhj2EtV_Mm65blOUWv2DZ8129C-vxl_XgC6JrNEIT2esdJG0kZ4k1Enrj4x/rj8kbyVRjhMOspl+PRbI+TGnVKK7x7kIfzVsWuWByFPUBZBCuHArYR7RaHkYGWdA=='
     cookies = cookie_parser(cookie_str) 
     
     # Extract user experience from user_base_url
@@ -151,6 +155,44 @@ if __name__ == "__main__":
         skill_name, endorsers = extract_skill_endorsers(q, cookies) 
         if skill_name == "" or len(endorsers) == 0: continue
         else: skill2endorsers[skill_name] = endorsers 
-            
+    return experiences, skill2endorsers
+
+
+def handler_interupt(): 
+    with open('user2info.pkl', 'wb') as fp:
+        pickle.dump(user2info, fp, protocol=pickle.HIGHEST_PROTOCOL)
+    exit()
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGINT, handler_interupt)
+    queue = ["bharath-pattabiraman-66063761"] # Queue of identifier for BFS 
+    visited_users = set() 
+    user2info = {} 
+    count = 0
+
+    while(len(queue) != 0):  
+        top_id = queue.pop(0) 
+        if top_id in visited_users: continue
         
-    
+        visited_users.add(top_id)
+
+        try: 
+            experiences, skill2endorsers = single_iteration(top_id) 
+            user2info[top_id] = {"work_experience" : experiences, "skill2endorsers":skill2endorsers} 
+            for l in skill2endorsers.values(): 
+                for user in l:            
+                    queue.append(user)
+        except:
+            print(f"Currently successfully recorded {count} users, failed on {len(visited_users) - count} users...") 
+            continue 
+            
+        count += 1 
+        print(f"Currently successfully recorded {count} users, failed on {len(visited_users) - count} users...") 
+        if len(visited_users) % 20 == 0: sleep(60)  
+        if (count >= 100): break  
+        
+
+    with open('user2info.pkl', 'wb') as fp:
+        pickle.dump(user2info, fp, protocol=pickle.HIGHEST_PROTOCOL)
+         

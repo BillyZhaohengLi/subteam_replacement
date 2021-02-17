@@ -1,0 +1,14 @@
+@global variable - user2info
+"""
+user2info {
+
+    "张三" : {
+                "work_experience": [(companyName1, companyID1, startDate1, endDate1)...],
+                "skill2endorse" : {"skill1":[name1, name2,...], "skill2":[...], ...} 
+            },
+
+
+    "李四": {...} 
+    
+}
+"""
