@@ -1,13 +1,23 @@
 from tkinter import *
 from tkinter import ttk
+import sys
 import tkinter as tk
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 from ScrollableFrame import ScrollableFrame
 from ScrollableFrame import DoubleScrollableFrame
 from algorithms.greedy import replace_subteam_greedy
 
 from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import proj3d
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 from matplotlib.figure import Figure
+from matplotlib.offsetbox import (OffsetImage, AnnotationBbox)
+
+from itertools import combinations
+
+from io import BytesIO
+from PIL import Image
 
 import networkx as nx
 
@@ -50,6 +60,7 @@ global draw_remaining
 global draw_to_replace
 global draw_results
 
+np.set_printoptions(threshold=sys.maxsize)
 ## dataset setup----------------------------------------------------------
 ## authors
 file1 = open('data/authorDict.txt', 'r')
@@ -90,6 +101,8 @@ W = np.ones((L.shape[1], L.shape[1]))
 remaining_team = dict()
 to_replace = dict()
 replacements_found = dict()
+annotationbbox_list = []
+toggle_visibility_list = []
 
 previous_author_id = None
 current_author_id = None
@@ -120,6 +133,7 @@ tabs.grid(row = 0, column = 3)
 ## options
 
 fig = Figure(figsize=(6.3, 6.3), dpi=100)
+pie_fig, pie_ax = plt.subplots()
 
 canvas = FigureCanvasTkAgg(fig, master=master)  # A tk.DrawingArea.
 canvas.draw()
@@ -128,6 +142,9 @@ ax = fig.add_subplot(111, projection='3d')
 ax._axis3don = False
 
 canvas.get_tk_widget().grid(row = 0, column = 0, columnspan = 3)
+
+def distance(t1, t2):
+	return np.sqrt(np.square(t1[0] - t2[0]) + np.square(t1[1] - t2[1]) + np.square(t1[2] - t2[2]))
 
 def remaining_team_random():
 	return (np.random.uniform(-0.5, 1), np.random.uniform(-0.5, 1), np.random.uniform(-0.5, 1))
@@ -138,41 +155,132 @@ def to_replace_random():
 def results_random():
 	return (np.random.uniform(-0.5, 1), np.random.uniform(-1, -0.5), np.random.uniform(-0.5, 1))
 
-def plot_points(team, colorcenter, colorborder):
+def plot_points(team, colorborder):
 	for person in team.keys():
 		publications = np.sum(L[person])
-		ax.text(*team[person], num_to_author[person], size = 10)
-		ax.scatter(*team[person], c = [colorcenter], s = [publications], edgecolors = colorborder)
 
-def plot_edges(team1, team2, color, alpha, style):
+		## draw an save pie chart
+		pie_ax.pie(x = [1], radius = 1.2, colors = [colorborder])
+		pie_ax.pie(x = L[person], radius = 1)
+		pie_ax.set_title(num_to_author[person], fontsize = 100)
+		temp_file = BytesIO()
+		plt.savefig(temp_file, bbox_inches = 'tight', dpi = pie_fig.dpi, transparent = True)
+		pie_ax.cla()
+		temp_file.seek(0)
+		img = Image.open(temp_file)
+
+		## calculate location
+		imagebox = OffsetImage(img, zoom = 0.04 * np.cbrt([publications]))
+		imagebox.image.axes = ax
+		x2, y2, _ = proj3d.proj_transform(*team[person], ax.get_proj())
+		ab = AnnotationBbox(imagebox, xy = (x2, y2), xybox = (0, 0), xycoords = 'data', boxcoords = 'offset points', bboxprops = dict(facecolor='white', alpha = 0.0), arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))
+		ax.add_artist(ab)
+		annotationbbox_list.append((ab, team[person]))
+
+		## draw annotation
+		## trigger for annotation box
+		point = ax.scatter(*team[person], c = [(1, 1, 1, 0)], s = [30])
+
+		## read skills
+		node_skills_sorted = []
+		for skill_id in range(L.shape[1]):
+			if L[person, skill_id] > 0:
+				node_skills_sorted.append((L[person, skill_id], num_to_conference[skill_id]))	
+		node_skills_sorted.sort(reverse = True)
+
+		annotation_string = "Publications:"
+		for (publications, conference) in node_skills_sorted:
+			annotation_string += ('\n' + str(conference) + ': ' + str(int(publications)))
+
+		annotation = ax.annotate(annotation_string, xy = (x2, y2), xytext = (0, 0), xycoords = 'data', textcoords = 'offset points', bbox = dict(boxstyle = 'round', fc = 'w'), arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))
+		annotation.set_visible(False)
+		annotation.set_zorder(100)
+		annotationbbox_list.append((annotation, team[person]))
+
+		toggle_visibility_list.append((annotation, point))
+
+def plot_edges_within(team, color, alpha, style):
+	pairs = combinations(team.keys(), 2)
+	for pair in pairs:
+		strength = adj[pair[0], pair[1]]
+		if strength > 0:
+			line = ax.plot3D([team[pair[0]][0], team[pair[1]][0]], [team[pair[0]][1], team[pair[1]][1]], [team[pair[0]][2], team[pair[1]][2]], color = color, alpha = alpha, linestyle = style, linewidth = 3 * np.sqrt(strength))
+			## add copublication annotation
+			midpoint = ((team[pair[0]][0] + team[pair[1]][0]) / 2, (team[pair[0]][1] + team[pair[1]][1]) / 2, (team[pair[0]][2] + team[pair[1]][2]) / 2)
+			x2, y2, _ = proj3d.proj_transform(*midpoint, ax.get_proj())
+
+			annotation_string = "Co-publications:" + str(int(strength))
+			annotation = ax.annotate(annotation_string, xy = (x2, y2), xytext = (0, 0), xycoords = 'data', textcoords = 'offset points', bbox = dict(boxstyle = 'round', fc = 'w'), arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))
+			annotation.set_visible(False)
+			annotation.set_zorder(100)
+			annotationbbox_list.append((annotation, midpoint))
+			toggle_visibility_list.append((annotation, line[0]))
+
+def plot_edges_between(team1, team2, color, alpha, style):
 	for person1 in team1.keys():
 		for person2 in team2.keys():
 			strength = adj[person1, person2]
 			if strength > 0:
-				ax.plot3D([team1[person1][0], team2[person2][0]], [team1[person1][1], team2[person2][1]], [team1[person1][2], team2[person2][2]], color = color, alpha = alpha, linestyle = style, linewidth = np.sqrt(strength))
+				line = ax.plot3D([team1[person1][0], team2[person2][0]], [team1[person1][1], team2[person2][1]], [team1[person1][2], team2[person2][2]], color = color, alpha = alpha, linestyle = style, linewidth = 3 * np.sqrt(strength), dashes = (15 / (3 * np.sqrt(strength)), 5 / (3 * np.sqrt(strength))))
+
+				## add copublication annotation
+				midpoint = ((team[pair[0]][0] + team[pair[1]][0]) / 2, (team[pair[0]][1] + team[pair[1]][1]) / 2, (team[pair[0]][2] + team[pair[1]][2]) / 2)
+				x2, y2, _ = proj3d.proj_transform(*midpoint, ax.get_proj())
+
+				annotation_string = "Co-publications:" + str(int(strength))
+				annotation = ax.annotate(annotation_string, xy = (x2, y2), xytext = (0, 0), xycoords = 'data', textcoords = 'offset points', bbox = dict(boxstyle = 'round', fc = 'w'), arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))
+				annotation.set_visible(False)
+				annotation.set_zorder(100)
+				annotationbbox_list.append((annotation, midpoint))
+				toggle_visibility_list.append((annotation, line[0]))
+
+## update pie chart positions
+def update_position(e):
+	for (chart, coord) in annotationbbox_list:
+		x2, y2, _ = proj3d.proj_transform(*coord, ax.get_proj())
+		chart.xy = x2,y2
+		chart.update_positions(fig.canvas.renderer)
+	fig.canvas.draw()
+
+def hover_details(e):
+	for (annotation, point) in toggle_visibility_list:
+		vis = annotation.get_visible()
+		if e.inaxes == ax:
+			cont, _ = point.contains(e)
+			if cont:
+				annotation.set_visible(True)
+				fig.canvas.draw_idle()
+			else:
+				if vis:
+					annotation.set_visible(False)
+					fig.canvas.draw_idle()
 
 def update_plot():
 	ax.clear()
+	annotationbbox_list.clear()
+	toggle_visibility_list.clear()
 
 	if draw_remaining.get() == 1:
-		plot_points(remaining_team, 'lime', 'green')
-		plot_edges(remaining_team, remaining_team, 'green', 0.5, 'solid')
+		plot_points(remaining_team, (0, 1, 0, 0.5))
+		plot_edges_within(remaining_team, (0, 1, 0), 0.5, 'solid')
 
 	if draw_to_replace.get() == 1:
-		plot_points(to_replace, 'orangered', 'red')
-		plot_edges(to_replace, to_replace, 'red', 0.5, 'solid')
+		plot_points(to_replace, (1, 0, 0, 0.5))
+		plot_edges_within(to_replace, (1, 0, 0), 0.5, 'solid')
 
 	if draw_results.get() == 1:
-		plot_points(replacements_found, 'goldenrod', 'gold')
-		plot_edges(replacements_found, replacements_found, 'gold', 0.5, 'solid')
+		plot_points(replacements_found, (1, 0.8, 0, 0.5))
+		plot_edges_within(replacements_found, (1, 0.8, 0), 0.5, 'solid')
 
 	if draw_remaining.get() == 1 and draw_to_replace.get() == 1:
-		plot_edges(remaining_team, to_replace, 'red', 0.2, 'dotted')
+		plot_edges_between(remaining_team, to_replace, 'red', 0.25, '--')
 
 	if draw_remaining.get() == 1 and draw_results.get() == 1:
-		plot_edges(remaining_team, replacements_found, 'gold', 0.2, 'dotted')
+		plot_edges_between(remaining_team, replacements_found, 'gold', 0.25, '--')
 
 	ax._axis3don = False
+	fig.canvas.mpl_connect('motion_notify_event', update_position)
+	fig.canvas.mpl_connect('motion_notify_event', hover_details)
 	fig.canvas.draw()
 
 draw_remaining = IntVar(value = 1)
@@ -188,13 +296,13 @@ draw_results_button = Checkbutton(master, text = 'show replacements', variable =
 draw_results_button.grid(row = 1, column = 2)
 
 ## Team manager tab-------------------------------------------
-remaining_team_label = Label(team_tab, text = "Remaining team (S):")
+remaining_team_label = Label(team_tab, text = "Remaining team (R):")
 remaining_team_label.pack()
 
 remaining_team_frame = ScrollableFrame(team_tab, height = 180)
 remaining_team_frame.pack()
 
-to_replace_label = Label(team_tab, text = "Members to replace (R):")
+to_replace_label = Label(team_tab, text = "Members to replace (S):")
 to_replace_label.pack()
 
 to_replace_frame = ScrollableFrame(team_tab, height = 180)
@@ -206,8 +314,17 @@ results_label.pack()
 results_frame = ScrollableFrame(team_tab, height = 180)
 results_frame.pack()
 
-def add_to_list(name_id, team_dict1, team_dict2, location):
+def too_close(team_dict, new_point):
+	for point in team_dict.values():
+		if distance(point, new_point) < 0.1:
+			return True
+	return False
+
+def add_to_list(name_id, team_dict1, team_dict2, location_func):
 	if name_id not in team_dict1 and name_id not in team_dict2:
+		location = location_func()
+		while (too_close(team_dict1, location)):
+			location = location_func()
 		team_dict1[name_id] = location
 		refresh()
 		update_plot()
@@ -217,8 +334,11 @@ def remove_from_list(name_id, team_dict):
 	refresh()
 	update_plot()
 
-def remove_and_add(name_id, team_dict1, team_dict2, location):
+def remove_and_add(name_id, team_dict1, team_dict2, location_func):
 	del team_dict1[name_id]
+	location = location_func()
+	while (too_close(team_dict2, location)):
+		location = location_func()
 	team_dict2[name_id] = location
 	refresh()
 	update_plot()
@@ -245,7 +365,7 @@ def refresh():
 		remove_button = Button(remaining_team_frame.scrollable_frame, text = "Remove", command=remove_func)
 		remove_button.grid(row=remain_row, column = 1, sticky = 'e')
 
-		replace_func = lambda name_id=name_id, team_dict1=remaining_team, team_dict2 = to_replace: remove_and_add(name_id, team_dict1, team_dict2, to_replace_random())
+		replace_func = lambda name_id=name_id, team_dict1=remaining_team, team_dict2 = to_replace: remove_and_add(name_id, team_dict1, team_dict2, to_replace_random)
 		replace_button = Button(remaining_team_frame.scrollable_frame, text = "Replace", command=replace_func)
 		replace_button.grid(row=remain_row, column = 2, sticky = 'e')
 
@@ -266,7 +386,7 @@ def refresh():
 		remove_button = Button(to_replace_frame.scrollable_frame, text = "Remove", command=remove_func)
 		remove_button.grid(row=replace_row, column = 1, sticky='e')
 
-		replace_func = lambda name_id=name_id, team_dict1=to_replace, team_dict2 = remaining_team: remove_and_add(name_id, team_dict1, team_dict2, remaining_team_random())
+		replace_func = lambda name_id=name_id, team_dict1=to_replace, team_dict2 = remaining_team: remove_and_add(name_id, team_dict1, team_dict2, remaining_team_random)
 		replace_button = Button(to_replace_frame.scrollable_frame, text = "Keep", command=replace_func)
 		replace_button.grid(row=replace_row, column = 2, sticky='e')
 
@@ -281,7 +401,7 @@ def refresh():
 	results_row = 0
 	for name_id in replacements_found.keys():
 		name_label = Label(results_frame.scrollable_frame, text = num_to_author[name_id], anchor='w')
-		name_label.grid(row=results_row, column = 0, sticky='e')
+		name_label.grid(row=results_row, column = 0)
 
 		select_func = lambda name_id=name_id: select_node(name_id)
 		detail_button = Button(results_frame.scrollable_frame, text = "Info", command=select_func, anchor='e')
@@ -303,7 +423,7 @@ back_button.grid(row = 0, column = 0, sticky = 'w')
 author_name_label = Label(author_title, textvariable = selected_author)
 author_name_label.grid(row = 0, column = 1)
 
-add_func = lambda: add_to_list(author_to_num[selected_author.get()], remaining_team, to_replace, remaining_team_random())
+add_func = lambda: add_to_list(author_to_num[selected_author.get()], remaining_team, to_replace, remaining_team_random)
 name_button = Button(author_title, text = "Add", command = add_func)
 name_button.grid(row = 0, column = 2, sticky = 'e')
 
@@ -366,7 +486,7 @@ def select_node(name_id):
 		detail_button = Button(neighbors_frame.scrollable_frame, text = "Info", command=select_func)
 		detail_button.grid(row=neighbor_row, column = 2, sticky = 'e')
 
-		add_func = lambda name_id=author_to_num[pair[1]], team_dict1=remaining_team, team_dict2 = to_replace: add_to_list(name_id, team_dict1, team_dict2, remaining_team_random())
+		add_func = lambda name_id=author_to_num[pair[1]], team_dict1=remaining_team, team_dict2 = to_replace: add_to_list(name_id, team_dict1, team_dict2, remaining_team_random)
 		name_button = Button(neighbors_frame.scrollable_frame, text = "Add", command = add_func)
 		name_button.grid(row=neighbor_row, column = 3, sticky = 'e')
 
@@ -394,21 +514,30 @@ def search_author():
 	query = search_query.get().lower()
 
 	search_results_frame.scrollable_frame.columnconfigure(1, weight = 1)
-	name_row = 0
+
+	query_results = []
 	for name in author_list:
 		if query in name.lower():
-			name_label = Label(search_results_frame.scrollable_frame, text = name, anchor='w')
-			name_label.grid(row=name_row, column = 0)
+			query_results.append(name)
+	if len(query_results) > 50:
+		error_message = Label(search_results_frame.scrollable_frame, text = 'Too many results. Please refine your search.', anchor='w')
+		error_message.grid(row=0, column = 0)
+		return
 
-			select_func = lambda name_id=author_to_num[name]: select_node(name_id)
-			detail_button = Button(search_results_frame.scrollable_frame, text = "Info", command=select_func)
-			detail_button.grid(row=name_row, column = 1, sticky = 'e')
+	name_row = 0
+	for name in query_results:
+		name_label = Label(search_results_frame.scrollable_frame, text = name, anchor='w')
+		name_label.grid(row=name_row, column = 0)
 
-			add_func = lambda name_id=author_to_num[name], team_dict1=remaining_team, team_dict2 = to_replace: add_to_list(name_id, team_dict1, team_dict2, remaining_team_random())
-			name_button = Button(search_results_frame.scrollable_frame, text = "Add", command=add_func)
-			name_button.grid(row=name_row, column = 2, sticky = 'e')
+		select_func = lambda name_id=author_to_num[name]: select_node(name_id)
+		detail_button = Button(search_results_frame.scrollable_frame, text = "Info", command=select_func)
+		detail_button.grid(row=name_row, column = 1, sticky = 'e')
 
-			name_row += 1
+		add_func = lambda name_id=author_to_num[name], team_dict1=remaining_team, team_dict2 = to_replace: add_to_list(name_id, team_dict1, team_dict2, remaining_team_random)
+		name_button = Button(search_results_frame.scrollable_frame, text = "Add", command=add_func)
+		name_button.grid(row=name_row, column = 2, sticky = 'e')
+
+		name_row += 1
 
 search_query = Entry(search_tab, width = 50)
 search_query.insert(END, 'Search for an author to begin:')
@@ -457,7 +586,7 @@ def run_program(adj, L, W, c, remaining_team, to_replace):
 	current_team = remaining_team + to_replace
 	new_members = replace_subteam_greedy(adj, L, W, c, current_team, to_replace)
 	for name_id in new_members:
-		add_to_list(name_id, replacements_found, replacements_found, results_random())
+		add_to_list(name_id, replacements_found, replacements_found, results_random)
 
 run_func = lambda: run_program(adj, L, W, float(c_value['text']), list(remaining_team.keys()), list(to_replace.keys()))
 run_button = Button(master, text = "Run program", command=run_func, anchor='e')
