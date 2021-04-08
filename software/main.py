@@ -225,7 +225,7 @@ def plot_edges_between(team1, team2, color, alpha, style):
 				line = ax.plot3D([team1[person1][0], team2[person2][0]], [team1[person1][1], team2[person2][1]], [team1[person1][2], team2[person2][2]], color = color, alpha = alpha, linestyle = style, linewidth = 3 * np.sqrt(strength), dashes = (15 / (3 * np.sqrt(strength)), 5 / (3 * np.sqrt(strength))))
 
 				## add copublication annotation
-				midpoint = ((team[pair[0]][0] + team[pair[1]][0]) / 2, (team[pair[0]][1] + team[pair[1]][1]) / 2, (team[pair[0]][2] + team[pair[1]][2]) / 2)
+				midpoint = ((team1[person1][0] + team2[person2][0]) / 2, (team1[person1][1] + team2[person2][1]) / 2, (team1[person1][2] + team2[person2][2]) / 2)
 				x2, y2, _ = proj3d.proj_transform(*midpoint, ax.get_proj())
 
 				annotation_string = "Co-publications:" + str(int(strength))
