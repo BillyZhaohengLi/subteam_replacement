@@ -213,7 +213,7 @@ def plot_edges_within(team, color, alpha, style):
 			annotation_string = "Co-publications:" + str(int(strength))
 			annotation = ax.annotate(annotation_string, xy = (x2, y2), xytext = (0, 0), xycoords = 'data', textcoords = 'offset points', bbox = dict(boxstyle = 'round', fc = 'w'), arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))
 			annotation.set_visible(False)
-			annotation.set_zorder(100)
+			annotation.set_zorder(50)
 			annotationbbox_list.append((annotation, midpoint))
 			toggle_visibility_list.append((annotation, line[0]))
 
@@ -231,7 +231,7 @@ def plot_edges_between(team1, team2, color, alpha, style):
 				annotation_string = "Co-publications:" + str(int(strength))
 				annotation = ax.annotate(annotation_string, xy = (x2, y2), xytext = (0, 0), xycoords = 'data', textcoords = 'offset points', bbox = dict(boxstyle = 'round', fc = 'w'), arrowprops = dict(arrowstyle = '->', connectionstyle = 'arc3,rad=0'))
 				annotation.set_visible(False)
-				annotation.set_zorder(100)
+				annotation.set_zorder(50)
 				annotationbbox_list.append((annotation, midpoint))
 				toggle_visibility_list.append((annotation, line[0]))
 
@@ -274,10 +274,10 @@ def update_plot():
 		plot_edges_within(replacements_found, (1, 0.8, 0), 0.5, 'solid')
 
 	if draw_remaining.get() == 1 and draw_to_replace.get() == 1:
-		plot_edges_between(remaining_team, to_replace, 'red', 0.25, '--')
+		plot_edges_between(remaining_team, to_replace, 'grey', 0.25, '--')
 
 	if draw_remaining.get() == 1 and draw_results.get() == 1:
-		plot_edges_between(remaining_team, replacements_found, 'gold', 0.25, '--')
+		plot_edges_between(remaining_team, replacements_found, 'grey', 0.25, '--')
 
 	ax._axis3don = False
 	fig.canvas.mpl_connect('motion_notify_event', update_position)
@@ -317,7 +317,7 @@ results_frame.pack()
 
 def too_close(team_dict, new_point):
 	for point in team_dict.values():
-		if distance(point, new_point) < 0.1:
+		if distance(point, new_point) < 0.2:
 			return True
 	return False
 
