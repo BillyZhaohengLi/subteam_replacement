@@ -158,11 +158,12 @@ def results_random():
 def plot_points(team, colorborder):
 	for person in team.keys():
 		publications = np.sum(L[person])
+		ax.text(*team[person], num_to_author[person] + "\n\n", size = 4 * np.cbrt([publications]), horizontalalignment = 'center', zorder = 5)
 
 		## draw an save pie chart
 		pie_ax.pie(x = [1], radius = 1.2, colors = [colorborder])
 		pie_ax.pie(x = L[person], radius = 1)
-		pie_ax.set_title(num_to_author[person], fontsize = 100)
+		#pie_ax.set_title(num_to_author[person], fontsize = 100)
 		temp_file = BytesIO()
 		plt.savefig(temp_file, bbox_inches = 'tight', dpi = pie_fig.dpi, transparent = True)
 		pie_ax.cla()
